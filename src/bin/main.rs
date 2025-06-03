@@ -18,6 +18,9 @@ use ieee80211::{match_frames, mgmt_frame::BeaconFrame};
 
 use core::panic::PanicInfo;
 
+use esp_hal::gpio::{Level, Output};
+use esp_hal::delay::Delay;
+
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("Panic occurred: {:?}", info);
@@ -33,6 +36,10 @@ fn main() -> ! {
     esp_println::logger::init_logger_from_env();
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
+
+    let mut led_blue = Output::new(peripherals.GPIO26, Level::Low);
+    let mut led_green = Output::new(peripherals.GPIO27, Level::High);
+    let delay = Delay::new();
 
     esp_alloc::heap_allocator!(72 * 1024);
 
@@ -69,5 +76,9 @@ fn main() -> ! {
 
     println!("循环起来");
 
-    loop {}
+    loop {
+        delay.delay_millis(500);
+        led_green.toggle();
+        led_blue.toggle();
+    }
 }
