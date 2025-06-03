@@ -1,32 +1,73 @@
+
 #![no_std]
 #![no_main]
 
-use esp_hal::clock::CpuClock;
-use esp_hal::main;
-use esp_hal::gpio::{Level, Output};
-use esp_hal::delay::Delay;
+extern crate alloc;
+
+use alloc::{
+    collections::btree_set::BTreeSet,
+    string::{String, ToString},
+};
+use core::cell::RefCell;
+use critical_section::Mutex;
+
+use esp_hal::{clock::CpuClock, main, rng::Rng, timer::timg::TimerGroup};
+use esp_println::println;
+use esp_wifi::{init, wifi};
+use ieee80211::{match_frames, mgmt_frame::BeaconFrame};
+
+use core::panic::PanicInfo;
 
 #[panic_handler]
-fn panic(_: &core::panic::PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    println!("Panic occurred: {:?}", info);
     loop {}
 }
 
+// esp_bootloader_esp_idf::esp_app_desc!();
+
+static KNOWN_SSIDS: Mutex<RefCell<BTreeSet<String>>> = Mutex::new(RefCell::new(BTreeSet::new()));
+
 #[main]
 fn main() -> ! {
-    // generator version: 0.3.1
-
+    esp_println::logger::init_logger_from_env();
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
-    
-    let mut led_blue = Output::new(peripherals.GPIO26, Level::Low);
-    let mut led_green = Output::new(peripherals.GPIO27, Level::High);
-    let delay = Delay::new();
 
-    loop {
-        delay.delay_millis(500);
-        led_green.toggle();
-        led_blue.toggle();
-    }
+    esp_alloc::heap_allocator!(72 * 1024);
 
-    // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.0/examples/src/bin
+    let timer_group_0 = TimerGroup::new(peripherals.TIMG0);
+    let esp_wifi_ctrl = init(
+        timer_group_0.timer0,
+        Rng::new(peripherals.RNG),
+        peripherals.RADIO_CLK,
+    )
+    .unwrap();
+
+    // We must initialize some kind of interface and start it.
+    let (_controller, interfaces) =
+        wifi::new_with_mode(&esp_wifi_ctrl, peripherals.WIFI, wifi::WifiStaDevice).unwrap();
+
+
+    let mut sniffer = interfaces.take_sniffer().unwrap();
+    sniffer.set_promiscuous_mode(true).unwrap();
+    sniffer.set_receive_cb(|packet| {
+        let _ = match_frames! {
+            packet.data,
+            beacon = BeaconFrame => {
+                let Some(ssid) = beacon.ssid() else {
+                    return;
+                };
+                if critical_section::with(|cs| {
+                    KNOWN_SSIDS.borrow_ref_mut(cs).insert(ssid.to_string())
+                }) {
+                    println!("Found new AP with SSID: {ssid}");
+                }
+            }
+        };
+    });
+
+    println!("循环起来");
+
+    loop {}
 }
