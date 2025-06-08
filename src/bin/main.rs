@@ -8,7 +8,7 @@ use alloc::{collections::btree_set::BTreeSet, string::{String, ToString}, vec};
 use core::cell::RefCell;
 use critical_section::Mutex;
 
-use esp_hal::{clock::CpuClock, main, rng::Rng, timer::timg::TimerGroup, Blocking, DriverMode};
+use esp_hal::{clock::CpuClock, main, rng::Rng, timer::timg::TimerGroup, Blocking};
 use esp_println::println;
 use esp_wifi::{init, wifi};
 use ieee80211::{match_frames, mgmt_frame::BeaconFrame};
@@ -19,9 +19,7 @@ use esp_hal::gpio::{Level, Output};
 use esp_hal::delay::Delay;
 
 use esp_hal::i2c::master::Config as I2cConfig;
-use esp_hal::i2c::master::ConfigError as I2cConfigError;
 use esp_hal::i2c::master::I2c;
-use esp_hal::peripherals::I2C0;
 use esp_hal::time::RateExtU32;
 
 #[panic_handler]
@@ -84,15 +82,17 @@ fn main() -> ! {
     });
 
     init_oled(&mut i2c);
-    write_oled(&mut i2c, &vec![255; 32]);
 
     println!("循环起来");
 
 
     loop {
-        delay.delay_millis(500);
+        delay.delay_millis(1500);
         led_green.toggle();
         led_blue.toggle();
+        for i in 0 .. 1024 {
+            write_oled(&mut i2c, i);
+        }
     }
 }
 
@@ -123,10 +123,14 @@ fn init_oled(i2c: &mut I2c<Blocking>) {
     }
 }
 
-fn write_oled(i2c: &mut I2c<Blocking>, data: &[u8]) {
+fn write_oled(i2c: &mut I2c<Blocking>, len: usize) {
     i2c.write(0x3cu8, &[0, 0, 0, 0xb0, 0, 0, 0, 0x10]).unwrap();
-    for &byte in data {
-        i2c.write(0x3cu8, &[32, byte]).unwrap();
+    let mut raw_data = vec![0x40u8; 16];
+    for block in 0 .. 1024 / 8 {
+        for i in 0 .. 8 {
+            raw_data[2 * i + 1] = if i + block * 8 <= len { 255 } else { 0 };
+        }
+        i2c.write(0x3cu8, &raw_data).unwrap();
     }
 }
 
