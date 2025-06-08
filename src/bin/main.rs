@@ -35,8 +35,7 @@ fn main() -> ! {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
-    let mut led_blue = Output::new(peripherals.GPIO26, Level::Low);
-    let mut led_green = Output::new(peripherals.GPIO27, Level::High);
+    let mut led = Output::new(peripherals.GPIO2, Level::Low);
     let delay = Delay::new();
 
     esp_alloc::heap_allocator!(72 * 1024);
@@ -47,7 +46,7 @@ fn main() -> ! {
         Rng::new(peripherals.RNG),
         peripherals.RADIO_CLK,
     )
-    .unwrap();
+        .unwrap();
 
     // We must initialize some kind of interface and start it.
     let (_controller, interfaces) =
@@ -77,7 +76,7 @@ fn main() -> ! {
         peripherals.I2C1,
         esp_hal::i2c::master::Config::default().with_frequency(400u32.kHz()),
     ).unwrap().with_scl(peripherals.GPIO22).with_sda(peripherals.GPIO21);
-    const ADDR : u8 = 0x3c;
+    const ADDR: u8 = 0x3c;
     let commands = [
         0xAE, // 显示关闭
         0xD5, 0x80, // 设置显示时钟分频
@@ -109,10 +108,17 @@ fn main() -> ! {
 
     println!("循环起来");
 
+    fn f(v: u8) -> u8 {
+        let ret = v << 1;
+        if ret == 0 { 1 } else { ret }
+    }
+
+    let mut offset = 0u8;
+
     loop {
+        offset += 1;
         delay.delay_millis(500);
-        led_green.toggle();
-        led_blue.toggle();
+        led.toggle();
 
 
         for cmd in settings {
@@ -121,16 +127,20 @@ fn main() -> ! {
 
         // i2c.write(ADDR, &[0x40, 0, 0x40, 0, 0x40, 255, 0x40, 255, 0x40, 255]).unwrap();
 
-        for x in 2 .. 6 {
-            for _ in 0 .. 8 {
-                for _ in 0 .. 8 * x {
-                    i2c.write(ADDR, &[0x40, 255]).unwrap();
+        for i in 0 .. 8 {
+            let mut v = 1 << ((i + offset) % 8);
+            for _ in 0..8 {
+                for _ in 0..8 {
+                    v = f(v);
+                    println!("v {v}");
+                    i2c.write(ADDR, &[0x40, v]).unwrap();
                 }
-                for _ in 0 .. 8 * x {
-                    i2c.write(ADDR, &[0x40, 0]).unwrap();
+                for _ in 0..8 {
+                    v = f(v);
+                    println!("v {v}");
+                    i2c.write(ADDR, &[0x40, v]).unwrap();
                 }
             }
-
         }
     }
 }
