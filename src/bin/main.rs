@@ -44,12 +44,6 @@ fn main() -> ! {
     let mut led_green = Output::new(peripherals.GPIO27, Level::High);
     let delay = Delay::new();
 
-    let i2c_config = I2cConfig::default().with_frequency(25_u32.kHz());
-    let mut i2c = I2c::new(peripherals.I2C1, i2c_config)
-        .unwrap()
-        .with_sda(peripherals.GPIO21)
-        .with_scl(peripherals.GPIO22);
-
     esp_alloc::heap_allocator!(72 * 1024);
 
     let timer_group_0 = TimerGroup::new(peripherals.TIMG0);
@@ -83,8 +77,15 @@ fn main() -> ! {
         };
     });
 
+
+    let i2c_config = I2cConfig::default().with_frequency(400u32.kHz());
+    let mut i2c = I2c::new(peripherals.I2C1, i2c_config)
+        .unwrap()
+        .with_scl(peripherals.GPIO22)
+        .with_sda(peripherals.GPIO21);
+
     init_oled(&mut i2c);
-    write_oled(&mut i2c, &vec![255; 32]);
+    write_oled(&mut i2c, &vec![255; 256]);
 
     println!("循环起来");
 
@@ -98,33 +99,40 @@ fn main() -> ! {
 
 fn init_oled(i2c: &mut I2c<Blocking>) {
     let commands = [
-        0xAE,        // Display OFF
-        0x20, 0x00,  // Set Memory Addressing Mode (Horizontal)
-        0xB0,        // Set Page Start Address
-        0xC8,        // Set COM Output Scan Direction
-        0x00,        // Set low column address
-        0x10,        // Set high column address
-        0x40,        // Set start line address
-        0x81, 0xFF,  // Set contrast control register
-        0xA1,        // Set segment re-map 0 to 127
-        0xA6,        // Set normal display
-        0xA8, 0x3F,  // Set multiplex ratio(1 to 64)
-        0xA4,        // Output RAM to Display
-        0xD3, 0x00,  // Set display offset
-        0xD5, 0xF0,  // Set display clock divide ratio/oscillator frequency
-        0xD9, 0x22,  // Set pre-charge period
-        0xDA, 0x12,  // Set com pins hardware configuration
-        0xDB, 0x20,  // Set vcomh
-        0x8D, 0x14,  // Set DC-DC enable
-        0xAF         // Display ON
+        0xAE, // 显示关闭
+        0xD5, 0x80, // 设置显示时钟分频
+        0xA8, 0x3F, // 设置多路复用比（64）
+        0xD3, 0x00, // 设置显示偏移
+        0x40, // 设置显示起始行
+        0x8D, 0x14, // 启用电荷泵
+        0x20, 0x00, // 设置内存寻址模式（水平）
+        0xA1, // 设置段重映射
+        0xC8, // 设置 COM 输出扫描方向
+        0xDA, 0x12, // 设置 COM 引脚配置
+        0x81, 0xCF, // 设置对比度
+        0xD9, 0xF1, // 设置预充电周期
+        0xDB, 0x40, // 设置 VCOMH 电压
+        0xA4, // 显示 GDDRAM 内容
+        0xA6, // 设置正常显示（非反转）
+        0xAF  // 显示开启
     ];
     for &cmd in commands.iter() {
-        i2c.write(0x3cu8, &[0, cmd]).unwrap();
+        if let Err(e) =i2c.write(0x3cu8, &[0, cmd]) {
+            println!("error : {e:?}");
+        }
     }
 }
 
 fn write_oled(i2c: &mut I2c<Blocking>, data: &[u8]) {
-    i2c.write(0x3cu8, &[0, 0, 0, 0xb0, 0, 0, 0, 0x10]).unwrap();
+
+    let settings = [
+        0x21, 0, 0x7f, 0x22, 0, 7
+    ];
+    for cmd in settings {
+        i2c.write(0x3c, &[0, cmd]).unwrap();
+    }
+
+    // i2c.write(0x3cu8, &[0, 0, 0, 0xb0, 0, 0, 0, 0x10]).unwrap();
     for &byte in data {
         i2c.write(0x3cu8, &[32, byte]).unwrap();
     }
