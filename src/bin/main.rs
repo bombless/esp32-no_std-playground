@@ -130,20 +130,23 @@ fn init_oled(i2c: &mut I2c<Blocking>) {
 }
 
 fn write_oled(i2c: &mut I2c<Blocking>, character: char) {
-    i2c.write(0x3cu8, &[0, 0, 0, 0xb0, 0, 0, 0, 0x10]).unwrap();
     let mut raw_data = vec![0x40u8; 9];
     let buff = characters::character_get_bitmap(character).to_le_bytes();
     for i in 0 .. 8 {
         raw_data[i + 1] = buff[i];
     }
-    i2c.write(0x3cu8, &raw_data).unwrap();
+    for i in 0 .. 8 {
+        let offset = i * 8;
+        i2c.write(0x3cu8, &[0, 0xb0 + i, offset & 0xf, 0x10 + (offset >> 4)]).unwrap();
+        i2c.write(0x3cu8, &raw_data).unwrap();
+    }
 }
 
 const CLEAR_SCREEN: [u8; 9] = [0x40, 0, 0, 0, 0, 0, 0, 0, 0];
 
 fn clear_oled(i2c: &mut I2c<Blocking>) {
     for page in 0 .. 8 {
-        i2c.write(0x3cu8, &[0, 0, 0, 0xb0 + page, 0, 0, 0, 0x10]).unwrap();
+        i2c.write(0x3cu8, &[0, 0xb0 + page, 0, 0x10]).unwrap();
         for _ in 0 .. 128 / 8 {
             i2c.write(0x3cu8, &CLEAR_SCREEN).unwrap();
         }
