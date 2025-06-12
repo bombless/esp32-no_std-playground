@@ -3,6 +3,7 @@
 #![no_main]
 
 extern crate alloc;
+mod characters;
 
 use alloc::{collections::btree_set::BTreeSet, string::{String, ToString}, vec};
 use core::cell::RefCell;
@@ -82,16 +83,21 @@ fn main() -> ! {
     });
 
     init_oled(&mut i2c);
+    clear_oled(&mut i2c);
 
     println!("循环起来");
 
+    let mut c = 'A';
 
     loop {
         delay.delay_millis(1500);
         led_green.toggle();
         led_blue.toggle();
-        for i in 0 .. 1024 {
-            write_oled(&mut i2c, i);
+        write_oled(&mut i2c, c);
+        if c >= 'Z' {
+            c = 'A';
+        } else {
+            c = (c as u8 + 1) as char;
         }
     }
 }
@@ -123,14 +129,24 @@ fn init_oled(i2c: &mut I2c<Blocking>) {
     }
 }
 
-fn write_oled(i2c: &mut I2c<Blocking>, len: usize) {
+fn write_oled(i2c: &mut I2c<Blocking>, character: char) {
     i2c.write(0x3cu8, &[0, 0, 0, 0xb0, 0, 0, 0, 0x10]).unwrap();
-    let mut raw_data = vec![0x40u8; 16];
-    for block in 0 .. 1024 / 8 {
-        for i in 0 .. 8 {
-            raw_data[2 * i + 1] = if i + block * 8 <= len { 255 } else { 0 };
+    let mut raw_data = vec![0x40u8; 9];
+    let buff = characters::character_get_bitmap(character).to_le_bytes();
+    for i in 0 .. 8 {
+        raw_data[i + 1] = buff[i];
+    }
+    i2c.write(0x3cu8, &raw_data).unwrap();
+}
+
+const CLEAR_SCREEN: [u8; 9] = [0x40, 0, 0, 0, 0, 0, 0, 0, 0];
+
+fn clear_oled(i2c: &mut I2c<Blocking>) {
+    for page in 0 .. 8 {
+        i2c.write(0x3cu8, &[0, 0, 0, 0xb0 + page, 0, 0, 0, 0x10]).unwrap();
+        for _ in 0 .. 128 / 8 {
+            i2c.write(0x3cu8, &CLEAR_SCREEN).unwrap();
         }
-        i2c.write(0x3cu8, &raw_data).unwrap();
     }
 }
 
