@@ -3,6 +3,7 @@
 #![no_main]
 
 extern crate alloc;
+#[path="../characters.rs"]
 mod characters;
 
 use alloc::{collections::btree_set::BTreeSet, string::{String, ToString}, vec};
