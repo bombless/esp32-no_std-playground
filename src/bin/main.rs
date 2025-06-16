@@ -21,6 +21,7 @@ use esp_hal::delay::Delay;
 
 use esp_hal::i2c::master::Config as I2cConfig;
 use esp_hal::i2c::master::I2c;
+use esp_hal::i2c::master::Operation::Write;
 use esp_hal::time::RateExtU32;
 
 #[panic_handler]
@@ -124,9 +125,7 @@ fn init_oled(i2c: &mut I2c<Blocking>) {
         0x8D, 0x14,  // Set DC-DC enable
         0xAF         // Display ON
     ];
-    for &cmd in commands.iter() {
-        i2c.write(0x3cu8, &[0, cmd]).unwrap();
-    }
+    i2c.transaction(0x3c, [&mut Write(&[0]), &mut Write(&commands)]).unwrap();
 }
 
 fn write_oled(i2c: &mut I2c<Blocking>, character: char) {
@@ -138,7 +137,7 @@ fn write_oled(i2c: &mut I2c<Blocking>, character: char) {
     for i in 0 .. 8 {
         let offset = i * 8;
         i2c.write(0x3cu8, &[0, 0xb0 + i, offset & 0xf, 0x10 + (offset >> 4)]).unwrap();
-        i2c.write(0x3cu8, &raw_data).unwrap();
+        i2c.transaction(0x3c, [&mut Write(&[0x40]), &mut Write(&buff)]).unwrap();
     }
 }
 
@@ -146,9 +145,9 @@ const CLEAR_SCREEN: [u8; 9] = [0x40, 0, 0, 0, 0, 0, 0, 0, 0];
 
 fn clear_oled(i2c: &mut I2c<Blocking>) {
     for page in 0 .. 8 {
-        i2c.write(0x3cu8, &[0, 0xb0 + page, 0, 0x10]).unwrap();
+        i2c.write(0x3c, &[0, 0xb0 + page, 0, 0x10]).unwrap();
         for _ in 0 .. 128 / 8 {
-            i2c.write(0x3cu8, &CLEAR_SCREEN).unwrap();
+            i2c.write(0x3c, &CLEAR_SCREEN).unwrap();
         }
     }
 }
