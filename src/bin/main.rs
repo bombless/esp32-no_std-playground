@@ -5,7 +5,7 @@
 extern crate alloc;
 mod characters;
 
-use alloc::{collections::btree_set::BTreeSet, string::{String, ToString}, vec};
+use alloc::{collections::btree_set::BTreeSet, string::{String, ToString}};
 use core::cell::RefCell;
 use critical_section::Mutex;
 
@@ -129,15 +129,15 @@ fn init_oled(i2c: &mut I2c<Blocking>) {
 }
 
 fn write_oled(i2c: &mut I2c<Blocking>, character: char) {
-    let mut raw_data = vec![0x40u8; 9];
     let buff = characters::character_get_bitmap(character).to_le_bytes();
-    for i in 0 .. 8 {
-        raw_data[i + 1] = buff[i];
-    }
+    let buff_5x8 = characters::character_get_bitmap_5x8(character);
     for i in 0 .. 8 {
         let offset = i * 8;
         i2c.write(0x3cu8, &[0, 0xb0 + i, offset & 0xf, 0x10 + (offset >> 4)]).unwrap();
         i2c.transaction(0x3c, [&mut Write(&[0x40]), &mut Write(&buff)]).unwrap();
+
+        i2c.write(0x3cu8, &[0, 0xb0 + i, offset & 0xf, 0x10 + (offset >> 4) + 1]).unwrap();
+        i2c.transaction(0x3c, [&mut Write(&[0x40]), &mut Write(&buff_5x8)]).unwrap();
     }
 }
 
